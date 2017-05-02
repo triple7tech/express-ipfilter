@@ -14,6 +14,16 @@ var iputil = require('ip');
 var rangeCheck = require('range_check');
 var IpDeniedError = require('./deniedError');
 
+var persistent = {
+  ips: [],
+  add(ips) {
+    this.ips = _.union(persistent.ips, ips);
+  },
+  remove(ips) {
+    this.ips = _.difference(persistent.ips, ips);
+  },
+};
+
 /**
  * express-ipfilter:
  *
@@ -39,8 +49,8 @@ var IpDeniedError = require('./deniedError');
  * @param [opts] {Object} options
  * @api public
  */
-module.exports = function ipfilter(ips, opts) {
-  ips = ips || false;
+function ipfilter(ipsIn, opts) {
+  persistent.add(ipsIn);
 
   var logger = function(message){ console.log(message);};
   var settings = _.defaults( opts || {}, {
@@ -92,7 +102,7 @@ module.exports = function ipfilter(ips, opts) {
   var matchClientIp = function(ip){
     var mode = settings.mode.toLowerCase();
 
-    var result = _.invoke(ips,testIp,ip,mode);
+    var result = _.invoke(persistent.ips,testIp,ip,mode);
 
     if(mode === 'allow'){
       return _.some(result);
@@ -135,7 +145,7 @@ module.exports = function ipfilter(ips, opts) {
   };
 
   var testRange = function(ip,constraint,mode){
-    var filteredSet = _.filter(ips,function(constraint){
+    var filteredSet = _.filter(persistent.ips,function(constraint){
       if(constraint.length > 1){
         var startIp = iputil.toLong(constraint[0]);
         var endIp = iputil.toLong(constraint[1]);
@@ -171,7 +181,7 @@ module.exports = function ipfilter(ips, opts) {
     var ip = settings.detectIp(req);
     // If no IPs were specified, skip
     // this middleware
-    if(!ips || !ips.length) { return next(); }
+    //if(!persistent.ips || !persistent.ips.length) { return next(); }
 
     if(matchClientIp(ip,req)) {
       // Grant access
@@ -190,4 +200,8 @@ module.exports = function ipfilter(ips, opts) {
     var err = new IpDeniedError('Access denied to IP address: ' + ip);
     return next(err);
   };
-};
+}
+
+_.merge(ipfilter, persistent);
+
+module.exports = ipfilter;
